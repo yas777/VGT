@@ -18,7 +18,7 @@ See our [poster](https://doc-doc.github.io/docs/VGT-ECCV22-poster.pdf) at ECCV'2
 </div>
 
 ## Todo
-1. [x] Release feature of TGIF-QA + MSRVTT-QA [temporally access, email us if needed.].
+1. [x] Release feature of MSRVTT-QA.
 
 ## Environment
 Assume you have installed Anaconda, please do the following to setup the envs:
@@ -82,15 +82,15 @@ python eval_next.py --folder VGT --mode val
    <td>-</td>
     <td><a href="https://drive.google.com/file/d/19TRupHHAP9m0eE9n3b2HMcliiJE9VGcN/view?usp=sharing">feats</a></td>
     <td>feats</td>
-    <td><a href="https://drive.google.com/file/d/1dmt22WEjzfa8m7yY4WjFZIWq8MIpYAMb/view?usp=sharing">feats</a></td>
-    <td><a href="https://drive.google.com/file/d/1XqqXv2y1C9LArB_iF_idTP0ollqxcPps/view?usp=sharing">feats</a></td>
+    <td><a href="https://drive.google.com/file/d/1oGCGj0jYft6KaxWS-3w_BW16V1GsA_By/view?usp=sharing">feats</a></td>
     <td>feats</td>
     <td>feats</td>
-    <td><a href="https://drive.google.com/file/d/1j2YRxQRSCiZB_ymNBSzd2tkpu1iy4ONT/view?usp=share_link">feats</a></td>
+    <td>feats</td>
+    <td><a href="https://drive.google.com/file/d/1sae3hT_B9e7LrEoKdYz2htXftEkhXelZ/view?usp=sharing">feats</a></td>
   </tr>
   <tr>
     <td>-</td>
-    <td><a href="https://xdshang.github.io/docs/vidor.html">train&val</a>+<a href="https://drive.google.com/file/d/12WCsaOOlDQNaXILSxvL-hIM3TxV15dV3/view?usp=sharing">test</a></td>
+    <td><a href="https://drive.google.com/file/d/1jTcRCrVHS66ckOUfWRb-rXdzJ52XAWQH/view">videos</a></td>
     <td>videos</td>
     <td>videos</td>
     <td>videos</td>
@@ -109,14 +109,14 @@ python eval_next.py --folder VGT --mode val
     <td><a href="https://drive.google.com/file/d/1vstHqtgZQBkPzzRTZo-Nb15rAQ4b7gOl/view?usp=sharing">Q&A</a></td>
   </tr>
 </table>
-(We have merged some files of the same dataset to avoid too many links.)
+(We have merged some files of the same dataset to avoid too many links. *: resolve the answer bias issue in TGIF-QA by regenerating the distractor answers.)
 
 ## Train
 We have provided all the scripts in the folder 'shells', you can start your training by specifying the GPU IDs behind the script. (If you have multiple GPUs, you can separate them with comma: ./shell/nextqa_train.sh 0,1)
 ```
 ./shell/nextqa_train.sh 0
 ```
-It will train the model and save to the folder 'save_models/nextqa/'
+It will train the model and save to the folder 'save_models/nextqa/'. Please follow a two-stage training scheme by firstly training the model and then freezing the language model to finetune on the best model obtained at the first stage.
 
 ### Result Visualization (NExT-QA)
 <div align="center">
