@@ -59,7 +59,7 @@ def eval(model, data_loader, a2v, args, test=False):
                 for bs, qid in enumerate(question_id):
                     results[qid] = {'prediction': int(topk.numpy()[bs,0]), 'answer':int(answer_id.numpy()[bs])}
             else:
-                fusion_proj, answer_proj = model(
+                fusion_proj, answer_proj, answer_pool = model(
                     video,
                     question,
                     text_mask=answer_mask,
@@ -67,9 +67,10 @@ def eval(model, data_loader, a2v, args, test=False):
                     answer=answer.cuda(),
                     seq_len = seq_len
                 )
-                # predicts = fusion_proj.squeeze() 
+                predicts = fusion_proj.squeeze() 
                 fusion_proj = fusion_proj.unsqueeze(2)
                 predicts = torch.bmm(answer_proj, fusion_proj).squeeze()
+                # predicts = answer_pool.squeeze()
                 predicted = torch.max(predicts, dim=1).indices.cpu()
                 metrics["acc"] += (predicted == answer_id).sum().item()
                 for bs, qid in enumerate(question_id):
@@ -122,7 +123,7 @@ def train(model, train_loader, a2v, optimizer, criterion, scheduler, epoch, args
             )
             # print(predicts.shape, answer_id)
         else:
-            fusion_proj, answer_proj = model(
+            fusion_proj, answer_proj, answer_pool = model(
                 video,
                 question,
                 text_mask=answer_mask,
@@ -131,11 +132,10 @@ def train(model, train_loader, a2v, optimizer, criterion, scheduler, epoch, args
                 seq_len = seq_len,
             )
             
-            # predicts = fusion_proj.squeeze()
-           
+            predicts = fusion_proj.squeeze()
             fusion_proj = fusion_proj.unsqueeze(2)
             predicts = torch.bmm(answer_proj, fusion_proj).squeeze()
-
+            # predicts = answer_pool.squeeze()
         if args.dataset == "ivqa":
             a = (answer_id / 2).clamp(max=1).cuda()
             vqa_loss = criterion(predicts, a)

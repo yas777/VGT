@@ -1,31 +1,34 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-# from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
-from transformers import BertTokenizer, BertModel, BertConfig
+from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
+# from transformers import BertTokenizer, BertModel, BertConfig
 from transformers.activations import gelu
+
 
 class Bert(nn.Module):
     """ Finetuned *BERT module """
 
     def __init__(self, bert_tokenizer):
         super(Bert, self).__init__()
-        config = BertConfig.from_pretrained("bert-base-uncased", output_hidden_states=True)
-        self.bert = BertModel.from_pretrained("bert-base-uncased", config=config)
-        
-        self.bert.resize_token_embeddings(len(bert_tokenizer))
-        
+        # config = BertConfig.from_pretrained("bert-base-uncased", hidden_dropout_prob=0.2, attention_probs_dropout_prob=0.2, output_hidden_states=True)
+        # self.bert = BertModel.from_pretrained("bert-base-uncased", config=config)
+        self.distilbert = DistilBertModel.from_pretrained(
+            'distilbert-base-uncased', dropout=0.2)
+        self.distilbert.resize_token_embeddings(len(bert_tokenizer))
+
+        # self.bert.resize_token_embeddings(len(bert_tokenizer))
+
         # You can uncomment this to freeze the language model for the 2nd-stage finetuning
         # for name, param in self.bert.named_parameters():
         #     param.requires_grad = False
-        
-        
+
     def forward(self, tokens):
         attention_mask = (tokens > 0).float()
         outs = self.bert(tokens, attention_mask=attention_mask)
         embds = outs[0]
-        
-        return embds, outs[1][-2]
+
+        return embds
 
 
 class Sentence_Maxpool(nn.Module):
@@ -65,6 +68,7 @@ class FFN(nn.Module):
         x = self.dropout(x)
         return x
 
+
 class AModel(nn.Module):
     """
     Answer embedding module
@@ -73,24 +77,29 @@ class AModel(nn.Module):
     def __init__(self, bert_tokenizer, word_dim=768, out_dim=512):
         super(AModel, self).__init__()
         self.bert = Bert(bert_tokenizer)
+        self.linear1 = torch.nn.Linear(768, 768)
+        self.layer_norm = nn.LayerNorm(768)
+        self.dropout = torch.nn.Dropout(0.2)
         self.linear_text = nn.Linear(word_dim, out_dim)
         # self.linear_text = FFN(word_dim, out_dim, out_dim)
 
-        
     def forward(self, answer):
         if len(answer.shape) == 3:
-            #multi-choice
+            # multi-choice (batch_size, number_answers, length_of_ans)
             bs, nans, lans = answer.shape
             answer = answer.view(bs * nans, lans)
-            answer, hd_state = self.bert(answer)
+            answer = self.bert(answer)
+            answer = self.linear1(answer)
+            answer = gelu(answer)
+            answer = self.layer_norm(answer)
+            answer = self.dropout(answer)
             answer = self.linear_text(answer)
             answer_g = answer.mean(dim=1)
-            # answer_g = answer[:, 0, :]
             answer_g = answer_g.view(bs, nans, -1)
         else:
-            answer, hd_state = self.bert(answer)
+            answer = self.bert(answer)
             answer = self.linear_text(answer)
             answer_g = answer.mean(dim=1)
             # answer_g = answer[:, 0, :]
-        
+
         return answer_g, answer

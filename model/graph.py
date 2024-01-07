@@ -30,9 +30,11 @@ class GraphConvolution(nn.Module):
 
     def forward(self, input, adj):
         # TODO make fc more efficient via "pack_padded_sequence"
-        
+        # graph and adjacency matrix
+        # n*d, d*d1 => n*d1 
         support = torch.bmm(input, self.weight.unsqueeze(
             0).expand(input.shape[0], -1, -1))
+        # n*n n*d1 => n*d1
         output = torch.bmm(adj, support)
         #output = SparseMM(adj)(support)
         if self.bias is not None:
@@ -57,7 +59,7 @@ class Graph(nn.Module):
 
         dim_hidden = dim_out if num_layers == 1 else dim_hidden
         self.layers = nn.ModuleList([
-            GraphConvolution(dim_in, dim_hidden)
+            GraphConvolution(dim_in, dim_hidden),
         ])
 
         for i in range(num_layers - 1):

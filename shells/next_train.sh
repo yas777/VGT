@@ -18,6 +18,7 @@ CUDA_VISIBLE_DEVICES=$GPU python main.py --checkpoint_dir=nextqa \
 	--dropout=0.3 \
 	--seed=666 \
 	--save_dir='../data/save_models/nextqa/VGT_B5/' \
+	--weight_decay=0.001
 	# --CM_PT=1
 	# --pretrain_path = '../data/save_models/webvid180K/e1.pth'
 	# --pretrain_path=../data/save_models/nextqa/VGT_B5/best_model.pth

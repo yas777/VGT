@@ -55,6 +55,7 @@ class EncoderVid(nn.Module):
 
     def forward(self, video_o):
         
+        # (batch-size, num_channels, num_frames, num_regions, feature_dims)
         bsize, numc, numf, numr, fdim =  video_o.shape
        
         video_o = video_o.view(bsize, numc*numf, numr, fdim)

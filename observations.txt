@@ -1,0 +1,4 @@
+only clips + (bert freeze) - not working
+only frames + (bert freeze) - not working
+only frames mean + (bert unfreeze) - ?
+only bert + questions - 

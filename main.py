@@ -14,6 +14,7 @@ from util import compute_a2v, load_model_by_key, save_to
 from train.train_videoqa import train, eval
 from data.vqa_loader import get_videoqa_loaders
 from embed_loss import MultipleChoiceLoss
+from torch.optim import AdamW
 import h5py
 
 def main(args):
@@ -90,7 +91,7 @@ def main(args):
     criterion = nn.CrossEntropyLoss(ignore_index=-1)
     # criterion = MultipleChoiceLoss()
     params_for_optimization = list(p for p in model.parameters() if p.requires_grad)
-    optimizer = optim.Adam(
+    optimizer = AdamW(
         params_for_optimization, lr=args.lr, weight_decay=args.weight_decay
     )
     criterion.cuda()

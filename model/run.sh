@@ -1,0 +1,1 @@
+singularity exec --nv --overlay /scratch/mm12799/overlay-25GB-500K.ext3:ro -B /scratch /scratch/mm12799/cuda11.4.2-cudnn8.2.4-devel-ubuntu20.04.3.sif /bin/bash

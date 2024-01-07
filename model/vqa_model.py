@@ -122,6 +122,17 @@ class MultiHeadSelfAttention(nn.Module):
         else:
             return (context,)
 
+class BiLSTM(nn.Module):
+    def __init__(self, input_size, hidden_size, num_layers, d_model):
+        super(BiLSTM, self).__init__()
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, bidirectional=True)
+        self.fc = nn.Linear(hidden_size * 2, d_model)  # output layer
+    def forward(self, x):
+        out, _ = self.lstm(x)  # forward pass through LSTM
+        out = self.fc(out[:, -1, :])  # get final output from last timestep
+        return out
 
 class FFN(nn.Module):
     def __init__(self, config):
@@ -423,7 +434,7 @@ class VGT(nn.Module):
         self.n_negs = n_negs
         d_pos = 128
         self.CM_PT = CM_PT
-        self.task = dataset.split['/'][-1]
+        self.task = dataset
         # video modules
         self.encode_vid = EncoderVid(feat_dim=feature_dim, 
                                     bbox_dim=5, 
@@ -478,6 +489,9 @@ class VGT(nn.Module):
             nn.Tanh(),
             nn.Linear(d_model // 2, 1),
             nn.Softmax(dim=-2))
+        self.satt_pool1 = copy.deepcopy(self.satt_pool)
+
+        self.bert_pool = nn.Sequential(nn.Linear(d_model, d_model//2), nn.Tanh(), nn.Linear(d_model//2, 1), nn.Softmax(dim=-2))
 
         self.gnn = Graph(dim_in=d_model, dim_hidden=d_model//2,
                          dim_out=d_model, num_layers=2, dropout=dropout)
@@ -501,7 +515,8 @@ class VGT(nn.Module):
         self.ttrans = Transformer(self.config)
         # # # # ###############cross-mode interaction########### 
         self.bidirec_att = CMAtten()
-
+        self.bidirec_att_regions = CMAtten()
+        self.bidirec_frames = CMAtten()
         # self.final_proj = nn.Linear(d_model, 1) # classification in multi-choice QA
         
         
@@ -536,7 +551,9 @@ class VGT(nn.Module):
         video_f = self.linear_video(video_f)
         video_f = gelu(video_f)
         video_f = self.norm_video(video_f) #(bs, numc, numf, dmodel)
-        
+        # test embedding of taking mean over just frames
+        # test_e = video_f.mean(dim=2).mean(dim=1)
+        # return test_e
 
         bsize, numc, numf, numr, fdim = video_o.size()
         bsize_lan, len_lan, dim_lan = language.size()
@@ -546,10 +563,17 @@ class VGT(nn.Module):
 
         #######################NTrans ################################
         X = X.view(bsize, numc, numf, numr, -1).permute(0,1,3,2,4)
+
+        ### Get CM attention for all regions across frames ###
+        xlen = numc*numr*numf
+        # X = X.view(bsize, xlen, -1)
+        X = X.reshape(bsize,xlen,-1)
+        X = self.cm_interaction(X, xlen, language, language_lens, self.bidirec_att_regions, ans_n)
+        X = X.view(bsize, numc, numr, numf, -1)
+        ### End of node attention ###
         short_mask = get_mask(torch.tensor([numf]*bsize*numc*numr, dtype=torch.long), numf).cuda()
         X = self.ttrans(X.reshape(bsize*numc*numr, numf, -1), short_mask)[0]
         X = X.reshape(bsize*numc, numr, numf, -1).permute(0,2,1,3)
-        
         ####################################################################
         hd_dim = X.shape[-1]
         X = X.reshape(bsize*numc*numf, numr, hd_dim)       
@@ -568,7 +592,21 @@ class VGT(nn.Module):
         A = F.softmax(A, dim=-1)
         X_o = self.gnn(X, A)
         X_o += X
-        
+
+        ## NTrans1 ##
+        X_o = X_o.view(bsize, numc, numf, numr, -1).permute(0,1,3,2,4)
+        ### Get CM attention for all regions across frames ###
+        xlen = numc*numr*numf
+        # X = X.view(bsize, xlen, -1)
+        X_o = X_o.reshape(bsize,xlen,-1)
+        X_o = self.cm_interaction(X_o, xlen, language, language_lens, self.bidirec_att_regions, ans_n)
+        X_o = X_o.view(bsize, numc, numr, numf, -1)
+        ### End of node attention ###
+        short_mask = get_mask(torch.tensor([numf]*bsize*numc*numr, dtype=torch.long), numf).cuda()
+        X_o = self.ttrans(X_o.reshape(bsize*numc*numr, numf, -1), short_mask)[0]
+        X_o = X_o.reshape(bsize*numc, numr, numf, -1).permute(0,2,1,3)
+        ## End of NTrans1 ##
+
         satt = self.satt_pool(X_o)
         X_o = torch.sum(X_o*satt, dim=-2)
 
@@ -577,21 +615,22 @@ class VGT(nn.Module):
         video = self.merge_fr(torch.cat([video_f, X_o], dim=-1))
        
         #########frame-level cross-model interaction##############
-        if self.task in ['action', 'transition']:
-            xlen = numc*numf
-            video = video.view(bsize, xlen, -1)
-            video = self.cm_interaction(video, xlen, language, language_lens, ans_n)
-            video = video.view(bsize, numc, numf, -1)
+        # if self.task in ['action', 'transition']:
+        xlen = numc*numf
+        video = video.view(bsize, xlen, -1)
+        video = self.cm_interaction(video, xlen, language, language_lens, self.bidirec_frames, ans_n)
+        video = video.view(bsize, numc, numf, -1)
         #########cross-model interaction##############
-
-        video = video.mean(dim=-2)
-
+        # frames are  taken mean here
+        satt1 = self.satt_pool1(video)
+        video = torch.sum(video*satt1,dim=-2).squeeze()
+        video = video.view(bsize,numc,-1)
         #####clip-level cross-model attention#############        
-        video = self.cm_interaction(video, numc, language, language_lens, ans_n)
+        video = self.cm_interaction(video, numc, language, language_lens, self.bidirec_att, ans_n)
         #####cross-model attention#############
         return video
 
-    def cm_interaction(self, X, xlen, language, language_lens, ans_n=5):
+    def cm_interaction(self, X, xlen, language, language_lens, cm_attention, ans_n=5):
         bsize = X.shape[0]
         X_len = torch.tensor([xlen] * bsize, dtype=torch.long).to(X.device)
         if ans_n == 1:
@@ -601,7 +640,7 @@ class VGT(nn.Module):
                                                             axis=1),[1, ans_n]), [-1])
             X = X[batch_repeat]
             X_len = X_len[batch_repeat]
-            Xatt, _ = self.bidirec_att(X, X_len, language, language_lens.view(-1))
+            Xatt, _ = cm_attention(X, X_len, language, language_lens.view(-1))
         Xatt += X
         #max pool over different candicates
         X = Xatt.view(bsize, ans_n, xlen, -1).max(dim=1)[0] 
@@ -664,16 +703,18 @@ class VGT(nn.Module):
                 fusion_proj = self.vqproj(global_feat)
             else:
                 video_proj = self.get_vqa_embedding_rfcpos(video, answer_w, seq_len)
-
+                # return video_proj, answer_g.to(video_proj.device)
                 video_proj = self.position_v(video_proj)
                 attended_v = self.mmt(x=video_proj, attn_mask=video_mask)[0]
                 global_feat = attended_v.mean(dim=1)
+                # global_feat = video_proj.mean(dim=1)
                 fusion_proj = self.vqproj(global_feat)
                 
             if fusion_proj is not None and answer_g.device != fusion_proj.device:
                 answer_g = answer_g.to(fusion_proj.device)
             if answer is not None:
-                return fusion_proj, answer_g
+                answer_pool = self.bert_pool(answer_g)
+                return fusion_proj, answer_g, answer_pool
                 # return self.final_proj(fusion_proj*answer_g), answer_g
             else:
                 # pred = self.final_proj(fusion_proj*question_g)
@@ -722,4 +763,3 @@ class VGT(nn.Module):
                 prediction_logits.view(-1, prediction_logits.size(-1)), labels.view(-1)
             )
             return mlm_loss
-

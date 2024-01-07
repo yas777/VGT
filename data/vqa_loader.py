@@ -248,7 +248,7 @@ class VideoQADataset(Dataset):
         # if not self.mc:
         #     type = self.data["type"].values[index]
             question_id = qid
-       
+        type = str(cur_sample["type"])
         return {
             "video_id": vid_id,
             "video_o": video_o,

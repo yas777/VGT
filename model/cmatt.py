@@ -36,7 +36,7 @@ class CMAtten(nn.Module):
     def get_u_tile(cls, s, s2):
         """
         attended vectors of s2 for each word in s1,
-        signify which words in s2 are most relevant to words in s1
+        signify which words in s2 are most relevant to words in s
         """
         a_weight = F.softmax(s, dim=2)  # [B, l1, l2]
         # remove nan from softmax on -inf
